@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Triton Standings</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: single 760px column. One line per player: identity left, rating and
+   per-game trend hard right, the gap between doing the separating. A line opens
+   into that player's matches for the selected event. */
+:root{
+  --bg:#EDF0F5; --card:#FFFFFF; --card-2:#F5F7FA; --line:#CFD6E0;
+  --ink:#141B29; --muted:#5D687A;
+  --gold:#9A6B12; --accent:#1F5F86; --accent-soft:#DCEAF3;
+  --good:#1B6E44; --good-soft:#D9EFE2;
+  --bad:#A23030; --bad-soft:#F7DEDE;
+  --warn:#8A5A10; --warn-soft:#F7E9CF;
+  --display:"Oswald",system-ui,sans-serif;
+  --body:"Source Sans 3",system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C111A; --card:#151C28; --card-2:#1B2431; --line:#2A3544;
+    --ink:#E6EBF2; --muted:#93A0B2;
+    --gold:#E0B557; --accent:#6BB6DE; --accent-soft:#152B39;
+    --good:#56C98A; --good-soft:#11301F;
+    --bad:#EC7B74; --bad-soft:#331819;
+    --warn:#E0A851; --warn-soft:#2E2412;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C111A; --card:#151C28; --card-2:#1B2431; --line:#2A3544;
+  --ink:#E6EBF2; --muted:#93A0B2;
+  --gold:#E0B557; --accent:#6BB6DE; --accent-soft:#152B39;
+  --good:#56C98A; --good-soft:#11301F;
+  --bad:#EC7B74; --bad-soft:#331819;
+  --warn:#E0A851; --warn-soft:#2E2412;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%}
+h1,h2,h3{font-family:var(--display);font-weight:500;margin:0;text-wrap:balance}
+button,select{font:inherit;color:inherit}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:0 64px}
+
+.top{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+.top-in{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mark{font-family:var(--display);font-size:22px;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.mark span{color:var(--gold)}
+.sub{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.grow{flex:1 1 auto;min-width:0}
+.dbtn,select{border:1px solid var(--line);background:var(--card-2);color:var(--ink);border-radius:8px;padding:6px 11px;font-size:14px;cursor:pointer;max-width:100%}
+.dbtn:hover,select:hover{border-color:var(--accent)}
+.dbtn:focus-visible,select:focus-visible,.head:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-block:20px}
+.cell{background:var(--card);padding:12px 14px;min-width:0}
+.cell b{display:block;font-family:var(--display);font-size:24px;line-height:1.1;font-variant-numeric:tabular-nums}
+.cell span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.cell .who{font-size:14px;font-weight:600;line-height:1.25;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+h2.sec{font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+
+.ladder{display:flex;flex-direction:column;gap:5px}
+.row{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.row.open{border-color:var(--accent)}
+.head{display:flex;align-items:center;gap:10px;width:100%;padding:9px 13px;background:none;border:0;cursor:pointer;text-align:left}
+.head:hover{background:var(--card-2)}
+.rank{font-family:var(--display);font-size:19px;line-height:1;width:26px;flex:0 0 auto;color:var(--muted);
+  font-variant-numeric:tabular-nums;text-align:right}
+.row:nth-child(-n+3) .rank{color:var(--gold)}
+.nm{font-family:var(--display);font-size:18px;line-height:1.2;letter-spacing:.01em;flex:0 1 auto;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evs,.wl{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.gap{flex:1 1 auto;min-width:10px}
+.spark{flex:0 0 auto;width:62px;height:18px;display:block}
+.chev{flex:0 0 auto;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
+  transform:rotate(45deg) translate(-2px,-2px);transition:transform .18s}
+.row.open .chev{transform:rotate(-135deg) translate(-2px,-2px)}
+
+.detail{border-top:1px solid var(--line);background:var(--card-2);padding:2px 13px 11px}
+.match{display:grid;grid-template-columns:auto 1fr auto;gap:3px 11px;align-items:baseline;
+  padding-block:10px;border-bottom:1px solid var(--line)}
+.match:last-of-type{border-bottom:0}
+.rnd{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  padding-top:3px;white-space:nowrap}
+.vs{min-width:0}
+.vs .opp{font-weight:600;font-size:15px}
+.vs .opp em{font-style:normal;color:var(--muted);font-weight:400}
+.note{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;padding:2px 7px;border-radius:999px;margin-top:4px}
+.note.sweep,.note.close-w{background:var(--good-soft);color:var(--good)}
+.note.reverse{background:var(--accent-soft);color:var(--accent)}
+.note.close-l,.note.land{background:var(--bad-soft);color:var(--bad)}
+.note.rsd{background:var(--warn-soft);color:var(--warn)}
+.note.flat{background:var(--card);color:var(--muted);border:1px solid var(--line)}
+.seq{font-family:var(--mono);font-size:10.5px;color:var(--muted);letter-spacing:.14em;margin-left:8px}
+.mv{text-align:right;white-space:nowrap}
+.mv .d{font-family:var(--mono);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;display:block}
+.path{font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-block:9px 2px;border-top:1px dashed var(--line);margin:2px 0 0}
+.up{color:var(--good)} .down{color:var(--bad)} .flatc{color:var(--muted)}
+
+.msg{border:1px dashed var(--line);border-radius:12px;padding:26px 20px;text-align:center;color:var(--muted);font-size:15px}
+.msg > b{display:block;font-family:var(--display);font-size:18px;color:var(--ink);margin-bottom:6px}
+.msg li b{font-weight:700;color:var(--ink)}
+.msg ol{text-align:left;max-width:460px;margin:12px auto 0;padding-left:20px;line-height:1.7;font-size:14px}
+.foot{margin-top:24px;font-size:13px;color:var(--muted);line-height:1.7}
+.foot code{font-family:var(--mono);font-size:12px;background:var(--card-2);padding:1px 5px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:520px){
+  .evs{display:none}
+  .mmr{font-size:19px;min-width:46px}
+  .nm{font-size:16px}
+  .spark{width:46px}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="grow">
+      <div class="mark">Triton <span>Standings</span></div>
+      <div class="sub" id="evsub">Loading</div>
+    </div>
+    <select id="pick" aria-label="Event" hidden></select>
+    <button class="dbtn" id="btn-reload">Refresh</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="strip" id="strip" hidden></div>
+  <h2 class="sec" id="sechead" hidden>Standings</h2>
+  <div id="body"><div class="msg"><b>Loading</b>Reading the Triton MMR sheet.</div></div>
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* The Triton MMR spreadsheet. Tabs are read straight from Google's own query
+   endpoint, which any sheet shared as "anyone with the link can view" serves
+   with CORS. No Apps Script, no deployment, nothing to keep in step. */
+var SHEET_ID = "1dbezzcgyLVsv_yz_8CfBQmcrI_2_u9AjZ5hjyAaqIRo";
+var TAB_EVENTS = "Event Log", TAB_MATCHES = "Match Log", TAB_RATINGS = "Ratings";
+
+var qs = new URLSearchParams(location.search);
+if(qs.get("sheet")) SHEET_ID = qs.get("sheet");
+
+var el = function(id){ return document.getElementById(id); };
+var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); };
+var num = function(v){ var n = Number(v); return isFinite(n) ? n : 0; };
+var r1  = function(v){ return Math.round(num(v) * 10) / 10; };
+var key = function(s){ return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, ""); };
+
+/* ---------- reading a tab ---------- */
+
+/* Google's query endpoint can hand the result to a callback instead of returning
+   it as a response body. Loading that through a script tag sidesteps cross-origin
+   rules entirely, so this page works served from a site or opened straight off
+   disk. A plain fetch fails in the second case with nothing but "Failed to fetch". */
+var cbSeq = 0;
+
+function readTab(tab){
+  return new Promise(function(resolve, reject){
+    var cb = "__triton_" + (++cbSeq) + "_" + Date.now();
+    var tag = document.createElement("script");
+    var settled = false;
+
+    function cleanup(){
+      try{ delete window[cb]; }catch(e){ window[cb] = undefined; }
+      if(tag.parentNode) tag.parentNode.removeChild(tag);
+      clearTimeout(timer);
+    }
+    var timer = setTimeout(function(){
+      if(settled) return;
+      settled = true; cleanup();
+      reject(new Error("the sheet did not answer in time"));
+    }, 20000);
+
+    window[cb] = function(data){
+      if(settled) return;
+      settled = true; cleanup();
+      try{ resolve(shapeTable(data, tab)); }
+      catch(err){ reject(err); }
+    };
+    tag.onerror = function(){
+      if(settled) return;
+      settled = true; cleanup();
+      reject(new Error("Google refused the request for the \u201c" + tab +
+        "\u201d tab. That happens when the sheet is not shared, or when no tab has that exact name"));
+    };
+    tag.src = "https://docs.google.com/spreadsheets/d/" + encodeURIComponent(SHEET_ID) +
+      "/gviz/tq?tqx=out:json;responseHandler:" + cb +
+      "&headers=1&sheet=" + encodeURIComponent(tab) + "&_=" + Date.now();
+    document.head.appendChild(tag);
+  });
+}
+
+/* Rows keyed by their column heading, so the layout of the tab can change
+   without breaking this page. */
+function shapeTable(data, tab){
+  if(!data || !data.table) throw new Error("the \u201c" + tab + "\u201d tab sent nothing readable");
+  if(data.status === "error"){
+    var e = (data.errors && data.errors[0]) || {};
+    throw new Error(String(e.detailed_message || e.message || "query error").replace(/<[^>]*>/g, ""));
+  }
+  var cols = (data.table.cols || []).map(function(c, i){
+    return String(c.label || c.id || ("col" + i)).trim();
+  });
+  return (data.table.rows || []).map(function(r){
+    var o = {};
+    (r.c || []).forEach(function(cell, i){
+      o[cols[i]] = cell == null ? "" : (cell.f != null ? cell.f : cell.v);
+    });
+    return o;
+  });
+}
+
+/* Cells typed as dates come back as "Date(2026,9,10)" or a formatted string. */
+function asDate(v){
+  if(v == null) return "";
+  var s = String(v).trim();
+  var d = s.match(/^Date\((\d+),(\d+),(\d+)/);
+  if(d) return d[1] + "-" + String(+d[2] + 1).padStart(2, "0") + "-" + String(+d[3]).padStart(2, "0");
+  var us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(us) return us[3] + "-" + us[1].padStart(2, "0") + "-" + us[2].padStart(2, "0");
+  return s;
+}
+function shortDate(iso){
+  var p = String(iso || "").split("-");
+  if(p.length !== 3) return iso || "";
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  return isNaN(d) ? iso : d.toLocaleDateString(undefined, {month:"numeric", day:"numeric"});
+}
+function prettyDate(iso){
+  var p = String(iso || "").split("-");
+  if(p.length !== 3) return iso || "";
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  return isNaN(d) ? iso : d.toLocaleDateString(undefined, {weekday:"long", month:"long", day:"numeric"});
+}
+
+/* ---------- vocabulary ---------- */
+
+/* The judge is a filler seat taken so nobody sits out an odd round, not a
+   competitor, so they are never ranked or shown. Older rows already on the
+   sheet are screened out here by name as well as by category. */
+function isJudge(name, cat){
+  return String(cat || "").toLowerCase().indexOf("judge") === 0 ||
+         String(name || "").trim().toLowerCase() === "judge";
+}
+
+function fmtDelta(d){ d = r1(d); return (d > 0 ? "+" : "") + d; }
+function dcls(d){ d = num(d); return d > 0 ? "up" : d < 0 ? "down" : "flatc"; }
+
+/* How a best of three went, from this player's side. The game order is what
+   separates a reverse sweep from an ordinary grind; without a Games column the
+   page falls back to the plain score. */
+function readMatch(m){
+  if(String(m.result).toLowerCase() === "bye") return {cls:"flat", text:"Bye, sat this round out"};
+  var sc = String(m.score || "").split("-");
+  var mine = num(sc[0]), theirs = num(sc[1]);
+  var seq = String(m.games || "").toUpperCase().replace(/[^WLD]/g, "");
+  var lostFirst = seq.charAt(0) === "L", wonFirst = seq.charAt(0) === "W";
+  var won = String(m.result).toLowerCase() === "win";
+  if(!sc[1] && !won) return {cls:"flat", text:String(m.result || "No result")};
+  if(mine === theirs) return {cls:"flat", text:"Draw: " + mine + "-" + theirs};
+  if(won){
+    if(theirs === 0) return {cls:"sweep",   text:"Clean sweep: " + mine + "-0"};
+    if(lostFirst)    return {cls:"reverse", text:"Reverse sweep: " + mine + "-" + theirs};
+    return {cls:"close-w", text:"Close game: " + mine + "-" + theirs};
+  }
+  if(mine === 0)     return {cls:"land", text:"Landslide: 0-" + theirs};
+  if(wonFirst)       return {cls:"rsd",  text:"Reverse swept: " + mine + "-" + theirs};
+  return {cls:"close-l", text:"Close game: " + mine + "-" + theirs};
+}
+
+/* ---------- rows ---------- */
+
+/* Rating after every game, from Match Log, so the line is per game not per event. */
+function trackOf(p, matches){
+  var ord = function(m){ return m.sort === undefined ? m.round : m.sort; };
+  var mine = (matches || []).filter(function(m){ return key(m.player) === key(p.name); })
+    .slice().sort(function(a, b){ return ord(a) - ord(b); });
+  var pts = [num(p.start)];
+  mine.forEach(function(m){ pts.push(num(m.after)); });
+  return pts;
+}
+
+function sparkline(pts){
+  if(!pts || pts.length < 2) return '<span class="spark"></span>';
+  var lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts);
+  var span = (hi - lo) || 1, W = 62, H = 18, pad = 2.5;
+  var coords = pts.map(function(v, i){
+    var x = pad + i / (pts.length - 1) * (W - pad * 2);
+    var y = H - pad - (v - lo) / span * (H - pad * 2);
+    return [x.toFixed(1), y.toFixed(1)];
+  });
+  var rising = pts[pts.length - 1] >= pts[0];
+  var stroke = rising ? "var(--good)" : "var(--bad)";
+  var last = coords[coords.length - 1];
+  return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' +
+    '<polyline points="' + coords.map(function(c){ return c.join(","); }).join(" ") +
+      '" fill="none" stroke="' + stroke + '" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="1.9" fill="' + stroke + '"/></svg>';
+}
+
+function rowHTML(p, rank, matches){
+  var id = "d" + rank;
+  var evs = (p.events === null || p.events === undefined) ? "" :
+    '<span class="evs">' + p.events + (p.events === 1 ? " event" : " events") + '</span>';
+  return '<div class="row">' +
+    '<button class="head" aria-expanded="false" aria-controls="' + id + '">' +
+      '<span class="rank">' + rank + '</span>' +
+      '<span class="nm">' + esc(p.name) + '</span>' +
+      evs +
+      '<span class="wl">' + num(p.w) + "–" + num(p.l) + '</span>' +
+      '<span class="gap"></span>' +
+      sparkline(trackOf(p, matches)) +
+      '<span class="chev"></span>' +
+    '</button>' +
+    '<div class="detail" id="' + id + '" hidden>' + detailHTML(p, matches) + '</div>' +
+  '</div>';
+}
+
+function detailHTML(p, matches){
+  var ord = function(m){ return m.sort === undefined ? m.round : m.sort; };
+  var mine = (matches || []).filter(function(m){ return key(m.player) === key(p.name); })
+    .slice().sort(function(a, b){ return ord(b) - ord(a); });
+  if(!mine.length){
+    return '<p class="path">No matches on record for ' + esc(p.name) + ' at this event.</p>';
+  }
+  var rows = mine.map(function(m){
+    var r = readMatch(m);
+    var seq = String(m.games || "").trim();
+    return '<div class="match">' +
+      '<span class="rnd">' + (m.when ? esc(shortDate(m.when)) + " · " : "") +
+        'R' + num(m.round) + (m.table ? " · T" + num(m.table) : "") + '</span>' +
+      '<span class="vs">' +
+        '<span class="opp">' + (String(m.result).toLowerCase() === "bye"
+          ? '<em>No opponent</em>' : 'vs ' + esc(m.opponent)) + '</span><br>' +
+        '<span class="note ' + r.cls + '">' + esc(r.text) + '</span>' +
+        (seq ? '<span class="seq">' + esc(seq) + '</span>' : '') +
+      '</span>' +
+      '<span class="mv"><span class="d ' + dcls(m.change) + '">' + fmtDelta(m.change) + '</span></span>' +
+    '</div>';
+  }).join("");
+  return rows;
+}
+
+function cell(v, label){ return '<div class="cell"><b>' + v + '</b><span>' + label + '</span></div>'; }
+
+function paint(players, matches, head, strip, section, foot){
+  el("evsub").textContent = head;
+  el("strip").hidden = !strip;
+  if(strip) el("strip").innerHTML = strip;
+  el("sechead").hidden = false;
+  el("sechead").textContent = section;
+  el("body").innerHTML = '<div class="ladder">' + players.map(function(p, i){
+    return rowHTML(p, i + 1, matches);
+  }).join("") + '</div>';
+  el("foot").textContent = foot;
+  el("body").querySelectorAll(".head").forEach(function(b){
+    b.addEventListener("click", function(){
+      var row = b.closest(".row");
+      var open = row.classList.toggle("open");
+      b.setAttribute("aria-expanded", open ? "true" : "false");
+      row.querySelector(".detail").hidden = !open;
+    });
+  });
+}
+
+function problem(title, detail, steps){
+  el("evsub").textContent = "Not loaded";
+  el("strip").hidden = true;
+  el("sechead").hidden = true;
+  el("pick").hidden = true;
+  el("body").innerHTML = '<div class="msg"><b>' + esc(title) + '</b>' + esc(detail) +
+    (steps ? '<ol>' + steps.map(function(s){ return '<li>' + s + '</li>'; }).join("") + '</ol>' : '') + '</div>';
+  el("foot").textContent = "";
+}
+
+/* ---------- loading ---------- */
+
+var EVENTS = [], MATCHES = [], RATINGS = [], DATES = [];
+
+/* Event Log gives the ladder, Match Log gives the detail and the trend. */
+function eventsFor(date){
+  return EVENTS.filter(function(r){ return asDate(r["Date"]) === date; }).map(function(r){
+    return {name:String(r["Player"] || ""), category:String(r["Category"] || ""),
+            start:num(r["Start MMR"]), end:num(r["End MMR"]), change:num(r["Change"]),
+            w:num(r["Matches W"]), l:num(r["Matches L"]),
+            gw:num(r["Games W"]), gl:num(r["Games L"]),
+            perf:num(r["Perf"]) || null, events:null};
+  }).filter(function(p){ return p.name && !isJudge(p.name, p.category); });
+}
+function matchesFor(date){
+  return MATCHES.filter(function(r){ return asDate(r["Date"]) === date; }).map(function(r){
+    return {round:num(r["Round"]), table:r["Table"] === "" ? null : num(r["Table"]),
+            player:String(r["Player"] || ""), opponent:String(r["Opponent"] || ""),
+            result:String(r["Result"] || ""), score:String(r["Score"] || ""),
+            games:String(r["Games"] || ""), change:num(r["Change"]),
+            after:num(r["MMR after"])};
+  }).filter(function(m){ return !isJudge(m.player) && !isJudge(m.opponent); });
+}
+
+function showEvent(date){
+  var players = eventsFor(date).sort(function(a, b){
+    return b.end - a.end || a.name.localeCompare(b.name);
+  });
+  var matches = matchesFor(date);
+  if(!players.length){
+    problem("Nothing recorded for that date",
+      "The Event Log has no rows for " + prettyDate(date) + ".");
+    return;
+  }
+  var played = matches.filter(function(m){ return String(m.result).toLowerCase() !== "bye"; }).length / 2;
+  var sweeps = matches.filter(function(m){ return readMatch(m).cls === "sweep"; }).length;
+  var top = players.slice().sort(function(a, b){ return b.change - a.change; })[0];
+  var evName = (EVENTS.filter(function(r){ return asDate(r["Date"]) === date; })[0] || {})["Event"] || "Riftbound";
+
+  paint(players, matches,
+    evName + " · " + prettyDate(date),
+    cell(players.length, "players") + cell(Math.round(played), "matches") +
+    cell(sweeps, "clean sweeps") +
+      '<div class="cell"><b class="' + dcls(top.change) + '">' + fmtDelta(top.change) +
+      '</b><div class="who">' + esc(top.name) + '</div><span>biggest climb</span></div>',
+    "Final standings",
+    "Read from the Event Log and Match Log tabs of the Triton MMR sheet. " +
+    "Click a player for their matches. The line traces how each game went for them.");
+}
+
+function showAllTime(){
+  /* Anyone with no events on record has never played, so they are not ranked. */
+  var players = RATINGS.map(function(r){
+      return {name:String(r["Player"] || ""), category:String(r["Category"] || ""),
+              events:num(r["Events"]), w:num(r["Matches W"]), l:num(r["Matches L"]),
+              end:num(r["Rating"]), start:firstSeenRating(String(r["Player"] || "")),
+              change:0, perf:null};
+    })
+    .filter(function(p){ return p.name && p.events > 0 && !isJudge(p.name, p.category); })
+    .sort(function(a, b){ return b.end - a.end || a.name.localeCompare(b.name); });
+
+  if(!players.length){
+    problem("No ladder yet", "The Ratings tab has no players with an event on record.");
+    return;
+  }
+  var totalEvents = players.reduce(function(a, p){ return a + num(p.events); }, 0);
+  var totalMatches = players.reduce(function(a, p){ return a + num(p.w) + num(p.l); }, 0) / 2;
+  /* Every match that player has on record, newest event first. */
+  var hist = MATCHES.map(function(r){
+    var d = asDate(r["Date"]);
+    return {round:num(r["Round"]), sort:dateRank(d) * 100 + num(r["Round"]), when:d,
+            table:r["Table"] === "" ? null : num(r["Table"]),
+            player:String(r["Player"] || ""), opponent:String(r["Opponent"] || ""),
+            result:String(r["Result"] || ""), score:String(r["Score"] || ""),
+            games:String(r["Games"] || ""), change:num(r["Change"]), after:num(r["MMR after"])};
+  }).filter(function(m){ return !isJudge(m.player) && !isJudge(m.opponent); });
+  paint(players, hist,
+    "All-time ladder",
+    cell(players.length, "ranked players") + cell(Math.round(totalMatches), "matches logged") +
+    cell(Math.round(totalEvents), "events logged") +
+    '<div class="cell"><b>&nbsp;</b><div class="who">' + esc(players[0].name) + '</div><span>leader</span></div>',
+    "All-time standings",
+    "From the Ratings tab. Players with no events on record are left out. " +
+    "Click a player for every match they have on record.");
+}
+
+/* Where this player's rating began, from their earliest event on record, so the
+   all-time line covers their whole history rather than a single night. */
+function firstSeenRating(name){
+  var k = key(name), best = null, bestDate = null;
+  EVENTS.forEach(function(r){
+    if(key(r["Player"]) !== k) return;
+    var d = asDate(r["Date"]);
+    if(bestDate === null || d < bestDate){ bestDate = d; best = num(r["Start MMR"]); }
+  });
+  return best === null ? 0 : best;
+}
+
+function dateRank(d){ var i = DATES.indexOf(d); return i < 0 ? 0 : (DATES.length - i); }
+
+function selected(){ return el("pick").value; }
+
+async function boot(){
+  el("body").innerHTML = '<div class="msg"><b>Loading</b>Reading the Triton MMR sheet.</div>';
+  try{
+    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS)]);
+    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2];
+  }catch(e){
+    problem("Could not read the sheet", e.message + ".", [
+      "In the sheet: Share, then General access set to <b>Anyone with the link</b>, role <b>Viewer</b>.",
+      "The tabs must be named exactly <code>Event Log</code>, <code>Match Log</code> and <code>Ratings</code>.",
+      "Sync at least one event from the pairings board, or those tabs will not exist yet.",
+      "Nothing needs deploying. This page does not use the Apps Script."
+    ]);
+    return;
+  }
+
+  var seen = {};
+  DATES = [];
+  EVENTS.forEach(function(r){
+    var d = asDate(r["Date"]);
+    if(d && !seen[d]){ seen[d] = 1; DATES.push(d); }
+  });
+  DATES.sort().reverse();
+
+  var pick = el("pick");
+  pick.innerHTML = DATES.map(function(d){
+    return '<option value="' + esc(d) + '">' + esc(prettyDate(d)) + '</option>';
+  }).join("") + '<option value="__all">All-time ladder</option>';
+  pick.hidden = false;
+
+  var want = qs.get("date");
+  pick.value = (want && DATES.indexOf(want) >= 0) ? want : (DATES[0] || "__all");
+
+  if(!DATES.length){
+    showAllTime();
+    return;
+  }
+  render();
+}
+
+function render(){
+  var v = selected();
+  if(v === "__all") showAllTime();
+  else showEvent(v);
+}
+
+el("pick").addEventListener("change", render);
+el("btn-reload").addEventListener("click", boot);
+
+boot();
+})();
+</script>
+</body>
+</html>
