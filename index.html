@@ -257,10 +257,20 @@ function isJudge(name, cat){
          String(name || "").trim().toLowerCase() === "judge";
 }
 
-/* Quick fix: Lucas is left off the public standings entirely for now. Brian is
-   going to explain the real rule later; until then this is a flat name block. */
+/* Lucas Chiu is not UCSD, so he is ranked only on the all-players ladder. The
+   sheet may know him as plain "Lucas"; he is always shown with his full name. */
 function isExcluded(name){
-  return String(name || "").trim().toLowerCase() === "lucas";
+  var k = key(name);
+  return k === "lucas" || k === "lucaschiu";
+}
+function displayName(name){ return isExcluded(name) ? "Lucas Chiu" : String(name || ""); }
+
+/* Who a match was against, as this view shows it. Judges and anyone outside the
+   view still appear in match history, just as a guest. */
+function oppLabel(name, allPlayers){
+  if(isJudge(name)) return "Guest";
+  if(isExcluded(name)) return allPlayers ? displayName(name) : "Guest";
+  return String(name || "");
 }
 
 function fmtDelta(d){ d = r1(d); return (d > 0 ? "+" : "") + d; }
@@ -326,7 +336,7 @@ function rowHTML(p, rank, matches){
   return '<div class="row' + podium + '">' +
     '<button class="head" aria-expanded="false" aria-controls="' + id + '">' +
       '<span class="rank">' + rank + '</span>' +
-      '<span class="nm">' + esc(p.name) + '</span>' +
+      '<span class="nm">' + esc(displayName(p.name)) + '</span>' +
       evs +
       '<span class="wl">' + num(p.w) + "–" + num(p.l) + '</span>' +
       '<span class="gap"></span>' +
@@ -342,7 +352,7 @@ function detailHTML(p, matches){
   var mine = (matches || []).filter(function(m){ return key(m.player) === key(p.name); })
     .slice().sort(function(a, b){ return ord(b) - ord(a); });
   if(!mine.length){
-    return '<p class="path">No matches on record for ' + esc(p.name) + ' at this event.</p>';
+    return '<p class="path">No matches on record for ' + esc(displayName(p.name)) + ' at this event.</p>';
   }
   var rows = mine.map(function(m){
     var r = readMatch(m);
@@ -409,11 +419,11 @@ function eventsFor(date){
 function matchesFor(date){
   return MATCHES.filter(function(r){ return asDate(r["Date"]) === date; }).map(function(r){
     return {round:num(r["Round"]), table:r["Table"] === "" ? null : num(r["Table"]),
-            player:String(r["Player"] || ""), opponent:String(r["Opponent"] || ""),
+            player:String(r["Player"] || ""), opponent:oppLabel(r["Opponent"], false),
             result:String(r["Result"] || ""), score:String(r["Score"] || ""),
             games:String(r["Games"] || ""), change:num(r["Change"]),
             after:num(r["MMR after"])};
-  }).filter(function(m){ return !isJudge(m.player) && !isJudge(m.opponent) && !isExcluded(m.player) && !isExcluded(m.opponent); });
+  }).filter(function(m){ return !isJudge(m.player) && !isExcluded(m.player); });
 }
 
 function showEvent(date){
@@ -436,7 +446,7 @@ function showEvent(date){
     "Click a player for their matches. The line traces how each game went for them.");
 }
 
-function showAllTime(){
+function showAllTime(allPlayers){
   /* Anyone with no events on record has never played, so they are not ranked. */
   var players = RATINGS.map(function(r){
       return {name:String(r["Player"] || ""), category:String(r["Category"] || ""),
@@ -444,7 +454,7 @@ function showAllTime(){
               end:num(r["Rating"]), start:firstSeenRating(String(r["Player"] || "")),
               change:0, perf:null};
     })
-    .filter(function(p){ return p.name && p.events > 0 && !isJudge(p.name, p.category) && !isExcluded(p.name); })
+    .filter(function(p){ return p.name && p.events > 0 && !isJudge(p.name, p.category) && (allPlayers || !isExcluded(p.name)); })
     .sort(function(a, b){ return b.end - a.end || a.name.localeCompare(b.name); });
 
   if(!players.length){
@@ -456,16 +466,17 @@ function showAllTime(){
     var d = asDate(r["Date"]);
     return {round:num(r["Round"]), sort:dateRank(d) * 100 + num(r["Round"]), when:d,
             table:r["Table"] === "" ? null : num(r["Table"]),
-            player:String(r["Player"] || ""), opponent:String(r["Opponent"] || ""),
+            player:String(r["Player"] || ""), opponent:oppLabel(r["Opponent"], allPlayers),
             result:String(r["Result"] || ""), score:String(r["Score"] || ""),
             games:String(r["Games"] || ""), change:num(r["Change"]), after:num(r["MMR after"])};
-  }).filter(function(m){ return !isJudge(m.player) && !isJudge(m.opponent) && !isExcluded(m.player) && !isExcluded(m.opponent); });
+  }).filter(function(m){ return !isJudge(m.player) && (allPlayers || !isExcluded(m.player)); });
   paint(players, hist,
-    "All-time ladder",
+    allPlayers ? "All-time ladder · all players" : "All-time ladder · UCSD",
     "",
-    "All-time standings",
+    allPlayers ? "All-time standings · all players" : "All-time standings · UCSD",
     "From the Ratings tab. Players with no events on record are left out. " +
-    "Click a player for every match they have on record.");
+    "Click a player for every match they have on record. Matches against a judge" +
+    (allPlayers ? "" : " or a non-UCSD player") + " show the opponent as Guest.");
 }
 
 /* Where this player's rating began, from their earliest event on record, so the
@@ -508,25 +519,24 @@ async function boot(){
   DATES.sort().reverse();
 
   var pick = el("pick");
-  pick.innerHTML = DATES.map(function(d){
-    return '<option value="' + esc(d) + '">' + esc(prettyDate(d)) + '</option>';
-  }).join("") + '<option value="__all">All-time ladder</option>';
+  pick.innerHTML = '<option value="__all">All-time (UCSD)</option>' +
+    '<option value="__allx">All-time (all players)</option>' +
+    DATES.map(function(d){
+      return '<option value="' + esc(d) + '">' + esc(prettyDate(d)) + '</option>';
+    }).join("");
   pick.hidden = false;
 
   /* All-time is the default view. A ?date= link still opens straight to that night. */
   var want = qs.get("date");
   pick.value = (want && DATES.indexOf(want) >= 0) ? want : "__all";
 
-  if(!DATES.length){
-    showAllTime();
-    return;
-  }
   render();
 }
 
 function render(){
   var v = selected();
-  if(v === "__all") showAllTime();
+  if(v === "__all") showAllTime(false);
+  else if(v === "__allx") showAllTime(true);
   else showEvent(v);
 }
 
