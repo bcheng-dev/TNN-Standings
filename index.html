@@ -495,6 +495,59 @@ function dateRank(d){ var i = DATES.indexOf(d); return i < 0 ? 0 : (DATES.length
 
 function selected(){ return el("pick").value; }
 
+/* Live: the board syncs after every result, so re-read the sheet every 30 seconds
+   while the page is on screen. A quiet refresh keeps the chosen view, any players
+   opened up and the scroll position, and a failed read just leaves the page as is. */
+var REFRESH_MS = 30000, refreshing = false;
+
+async function refresh(){
+  if(refreshing || document.hidden || !DATES) return;
+  refreshing = true;
+  try{
+    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS)]);
+    var before = JSON.stringify([EVENTS, MATCHES, RATINGS]);
+    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2];
+    if(JSON.stringify([EVENTS, MATCHES, RATINGS]) === before) return;
+    var open = [].map.call(document.querySelectorAll(".row.open .nm"), function(n){ return n.textContent; });
+    var y = window.scrollY;
+    buildPicker(selected());
+    render();
+    document.querySelectorAll(".row").forEach(function(row){
+      if(open.indexOf(row.querySelector(".nm").textContent) < 0) return;
+      row.classList.add("open");
+      row.querySelector(".head").setAttribute("aria-expanded", "true");
+      row.querySelector(".detail").hidden = false;
+    });
+    window.scrollTo(0, y);
+  }catch(e){
+    /* Keep showing the last good read; the next tick tries again. */
+  }finally{
+    refreshing = false;
+  }
+}
+setInterval(refresh, REFRESH_MS);
+document.addEventListener("visibilitychange", function(){ if(!document.hidden) refresh(); });
+
+/* Event dates from the Event Log, newest first, with the all-time views on top.
+   keep holds the view to stay on when it still exists. */
+function buildPicker(keep){
+  var seen = {};
+  DATES = [];
+  EVENTS.forEach(function(r){
+    var d = asDate(r["Date"]);
+    if(d && !seen[d]){ seen[d] = 1; DATES.push(d); }
+  });
+  DATES.sort().reverse();
+  var pick = el("pick");
+  pick.innerHTML = '<option value="__all">All-time (UCSD)</option>' +
+    '<option value="__allx">All-time (all players)</option>' +
+    DATES.map(function(d){
+      return '<option value="' + esc(d) + '">' + esc(prettyDate(d)) + '</option>';
+    }).join("");
+  pick.hidden = false;
+  pick.value = (keep === "__all" || keep === "__allx" || DATES.indexOf(keep) >= 0) ? keep : "__all";
+}
+
 async function boot(){
   el("body").innerHTML = '<div class="msg"><b>Loading</b>Reading the Triton MMR sheet.</div>';
   try{
@@ -510,26 +563,9 @@ async function boot(){
     return;
   }
 
-  var seen = {};
-  DATES = [];
-  EVENTS.forEach(function(r){
-    var d = asDate(r["Date"]);
-    if(d && !seen[d]){ seen[d] = 1; DATES.push(d); }
-  });
-  DATES.sort().reverse();
-
-  var pick = el("pick");
-  pick.innerHTML = '<option value="__all">All-time (UCSD)</option>' +
-    '<option value="__allx">All-time (all players)</option>' +
-    DATES.map(function(d){
-      return '<option value="' + esc(d) + '">' + esc(prettyDate(d)) + '</option>';
-    }).join("");
-  pick.hidden = false;
-
-  /* All-time is the default view. A ?date= link still opens straight to that night. */
-  var want = qs.get("date");
-  pick.value = (want && DATES.indexOf(want) >= 0) ? want : "__all";
-
+  /* All-time is the default view. A ?date= link still opens straight to that night;
+     Refresh keeps whatever view is showing. */
+  buildPicker(el("pick").hidden ? (qs.get("date") || "__all") : selected());
   render();
 }
 
