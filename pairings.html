@@ -190,7 +190,7 @@ function paint(rows){
         '<div class="pl' + (winA ? " win" : "") + '">' + esc(a) + '</div>' +
         '<div class="vs">vs</div>' +
         '<div class="pl' + (winB ? " win" : "") + '">' + esc(b) + '</div>' +
-        '<span class="res' + (res ? "" : " wait") + '">' + esc(res || "Playing") + '</span>' +
+        '<span class="res' + (res && !/^in progress/i.test(res) ? "" : " wait") + '">' + esc(res || "Playing") + '</span>' +
       '</div></div>';
   }).join("") + '</div>';
   if(bye) html += '<div class="msg" style="margin-top:10px;padding:14px" data-names="' + esc(norm(bye["Player A"])) + '"><b style="display:inline;font-size:16px">' +
