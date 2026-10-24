@@ -277,7 +277,7 @@ function displayName(name){ return isExcluded(name) ? "Lucas Chiu" : String(name
 /* Who a match was against, as this view shows it. Judges and anyone outside the
    view still appear in match history, just as a guest. */
 function oppLabel(name, allPlayers){
-  if(isJudge(name)) return "Guest";
+  if(isJudge(name)) return "Judge";
   if(isExcluded(name)) return allPlayers ? displayName(name) : "Guest";
   return String(name || "");
 }
@@ -503,8 +503,8 @@ function showAllTime(allPlayers){
     "",
     allPlayers ? "All-time standings · all players" : "All-time standings · UCSD",
     "From the Ratings tab. Players with no events on record are left out. " +
-    "Click a player for every match they have on record. Matches against a judge" +
-    (allPlayers ? "" : " or a non-UCSD player") + " show the opponent as Guest." + rankNote());
+    "Click a player for every match they have on record." +
+    (allPlayers ? "" : " Matches against a non-UCSD player show the opponent as Guest.") + rankNote());
 }
 
 /* Where this player's rating began, from their earliest event on record, so the
