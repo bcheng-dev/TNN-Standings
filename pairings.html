@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Triton Pairings</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Player-facing view of the round on the floor. Read only: one card per table,
+   a search box to find your own, refreshed on its own every 20 seconds. */
+:root{
+  --bg:#EDF0F5; --card:#FFFFFF; --card-2:#F5F7FA; --line:#CFD6E0;
+  --ink:#141B29; --muted:#5D687A;
+  --gold:#9A6B12; --accent:#1F5F86; --accent-soft:#DCEAF3;
+  --good:#1B6E44; --good-soft:#D9EFE2;
+  --display:"Oswald",system-ui,sans-serif;
+  --body:"Source Sans 3",system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C111A; --card:#151C28; --card-2:#1B2431; --line:#2A3544;
+    --ink:#E6EBF2; --muted:#93A0B2;
+    --gold:#E0B557; --accent:#6BB6DE; --accent-soft:#152B39;
+    --good:#56C98A; --good-soft:#11301F;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C111A; --card:#151C28; --card-2:#1B2431; --line:#2A3544;
+  --ink:#E6EBF2; --muted:#93A0B2;
+  --gold:#E0B557; --accent:#6BB6DE; --accent-soft:#152B39;
+  --good:#56C98A; --good-soft:#11301F;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%}
+h1,h2{font-family:var(--display);font-weight:500;margin:0}
+button,input{font:inherit;color:inherit}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:0 64px}
+
+.top{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+.top-in{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mark{font-family:var(--display);font-size:22px;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.mark span{color:var(--gold)}
+.sub{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.grow{flex:1 1 auto;min-width:0}
+.dbtn{border:1px solid var(--line);background:var(--card-2);color:var(--ink);border-radius:8px;padding:6px 11px;font-size:14px;cursor:pointer;text-decoration:none}
+.dbtn:hover{border-color:var(--accent)}
+.dbtn:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.find{width:100%;margin:18px 0 6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:16px}
+.findnote{font-size:13px;color:var(--muted);min-height:20px;margin:0 0 10px}
+h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:14px 0 12px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.tbl{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;display:flex;gap:12px;align-items:center}
+.tbl.hit{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.tbl.dim{opacity:.35}
+.tnum{flex:0 0 auto;min-width:40px;text-align:center;font-family:var(--display);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);line-height:1.1}
+.tnum b{display:block;font-size:26px;color:var(--ink);letter-spacing:0}
+.who{flex:1 1 auto;min-width:0}
+.pl{font-family:var(--display);font-size:18px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl.win{color:var(--good)}
+.vs{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.res{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:999px;margin-top:5px;background:var(--good-soft);color:var(--good)}
+.res.wait{background:var(--card-2);color:var(--muted);border:1px solid var(--line)}
+
+.msg{border:1px dashed var(--line);border-radius:12px;padding:26px 20px;text-align:center;color:var(--muted);font-size:15px;margin-top:18px}
+.msg b{display:block;font-family:var(--display);font-size:18px;color:var(--ink);margin-bottom:6px}
+.foot{margin-top:24px;font-size:13px;color:var(--muted)}
+.foot a{color:var(--accent)}
+@media (max-width:520px){ .grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="grow">
+      <div class="mark">Triton <span>Pairings</span></div>
+      <div class="sub" id="evsub">Loading</div>
+    </div>
+    <a class="dbtn" href="./">Standings</a>
+    <button class="dbtn" id="btn-reload">Refresh</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <input class="find" id="find" type="search" placeholder="Type your name to find your table" autocomplete="off" hidden>
+  <p class="findnote" id="findnote"></p>
+  <h2 class="sec" id="sechead" hidden></h2>
+  <div id="body"><div class="msg"><b>Loading</b>Reading the latest pairings.</div></div>
+  <p class="foot" id="foot"></p>
+  <p class="foot"><a href="https://github.com/bcheng-dev/TNN-Standings">Open source on GitHub</a></p>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* The organiser board publishes the current round to the Live Pairings tab of
+   the Triton MMR sheet. This page only reads it. */
+var SHEET_ID = "1dbezzcgyLVsv_yz_8CfBQmcrI_2_u9AjZ5hjyAaqIRo", TAB = "Live Pairings", REFRESH_MS = 20000;
+var qs = new URLSearchParams(location.search);
+if(qs.get("sheet")) SHEET_ID = qs.get("sheet");
+
+var el = function(id){ return document.getElementById(id); };
+var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); };
+
+/* Google's query endpoint, loaded through a script tag so it works from any host. */
+var cbSeq = 0;
+function readTab(tab){
+  return new Promise(function(resolve, reject){
+    var cb = "__pair_" + (++cbSeq) + "_" + Date.now();
+    var tag = document.createElement("script"), settled = false;
+    function cleanup(){
+      try{ delete window[cb]; }catch(e){ window[cb] = undefined; }
+      if(tag.parentNode) tag.parentNode.removeChild(tag);
+      clearTimeout(timer);
+    }
+    var timer = setTimeout(function(){
+      if(settled) return; settled = true; cleanup();
+      reject(new Error("the sheet did not answer in time"));
+    }, 20000);
+    window[cb] = function(data){
+      if(settled) return; settled = true; cleanup();
+      try{
+        if(!data || !data.table) throw new Error("nothing readable came back");
+        var cols = (data.table.cols || []).map(function(c, i){ return String(c.label || c.id || ("col" + i)).trim(); });
+        resolve((data.table.rows || []).map(function(r){
+          var o = {};
+          (r.c || []).forEach(function(cell, i){ o[cols[i]] = cell == null ? "" : String(cell.f != null ? cell.f : cell.v); });
+          return o;
+        }));
+      }catch(err){ reject(err); }
+    };
+    tag.onerror = function(){
+      if(settled) return; settled = true; cleanup();
+      reject(new Error("Google refused the request"));
+    };
+    tag.src = "https://docs.google.com/spreadsheets/d/" + encodeURIComponent(SHEET_ID) +
+      "/gviz/tq?tqx=out:json;responseHandler:" + cb + "&headers=1&sheet=" + encodeURIComponent(TAB) + "&_=" + Date.now();
+    document.head.appendChild(tag);
+  });
+}
+
+function prettyDate(iso){
+  var p = String(iso || "").split("-");
+  if(p.length !== 3) return iso || "";
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  return isNaN(d) ? iso : d.toLocaleDateString(undefined, {weekday:"long", month:"long", day:"numeric"});
+}
+var norm = function(s){ return String(s || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim(); };
+
+var last = "";
+function paint(rows){
+  /* Google serves the first tab when the name does not match; a real Live
+     Pairings tab always has these columns. */
+  if(!rows.length || !("Player A" in rows[0]) || !("Round" in rows[0])){
+    el("evsub").textContent = "No pairings yet";
+    el("find").hidden = true; el("sechead").hidden = true;
+    el("body").innerHTML = '<div class="msg"><b>No pairings yet</b>They show up here as soon as the organisers publish a round.</div>';
+    el("foot").textContent = "";
+    return;
+  }
+  var head = rows[0];
+  el("evsub").textContent = [head["Event"], prettyDate(head["Date"])].filter(Boolean).join(" · ");
+  el("sechead").hidden = false;
+  el("sechead").textContent = "Round " + head["Round"] + (head["Method"] ? " · " + head["Method"] : "");
+  el("foot").textContent = "Published " + (head["Published"] || "") + ". This page refreshes on its own.";
+
+  var tables = rows.filter(function(r){ return r["Player A"] && r["Result"] !== "Bye" && r["Table"] !== ""; })
+    .sort(function(a, b){ return Number(a["Table"]) - Number(b["Table"]); });
+  var bye = rows.filter(function(r){ return r["Result"] === "Bye"; })[0];
+  if(!tables.length && !bye){
+    el("find").hidden = true;
+    el("body").innerHTML = '<div class="msg"><b>No tables yet</b>Check back in a moment.</div>';
+    return;
+  }
+  var html = '<div class="grid">' + tables.map(function(r){
+    var res = r["Result"] || "", a = r["Player A"], b = r["Player B"];
+    var winA = res.indexOf(a + " wins") === 0, winB = res.indexOf(b + " wins") === 0;
+    return '<div class="tbl" data-names="' + esc(norm(a) + " | " + norm(b)) + '" data-label="Table ' + esc(r["Table"]) + ': ' + esc(a) + ' vs ' + esc(b) + '">' +
+      '<div class="tnum">Table<b>' + esc(r["Table"]) + '</b></div>' +
+      '<div class="who">' +
+        '<div class="pl' + (winA ? " win" : "") + '">' + esc(a) + '</div>' +
+        '<div class="vs">vs</div>' +
+        '<div class="pl' + (winB ? " win" : "") + '">' + esc(b) + '</div>' +
+        '<span class="res' + (res ? "" : " wait") + '">' + esc(res || "Playing") + '</span>' +
+      '</div></div>';
+  }).join("") + '</div>';
+  if(bye) html += '<div class="msg" style="margin-top:10px;padding:14px" data-names="' + esc(norm(bye["Player A"])) + '"><b style="display:inline;font-size:16px">' +
+    esc(bye["Player A"]) + '</b> has the bye this round.</div>';
+  el("body").innerHTML = html;
+  el("find").hidden = false;
+  applyFind();
+}
+
+function applyFind(){
+  var q = norm(el("find").value), hit = null;
+  el("body").querySelectorAll(".tbl").forEach(function(c){
+    var on = !q || c.getAttribute("data-names").indexOf(q) >= 0;
+    c.classList.toggle("dim", !on);
+    c.classList.toggle("hit", !!q && on);
+    if(q && on && !hit) hit = c;
+  });
+  var byeEl = el("body").querySelector(".msg[data-names]");
+  var byeHit = q && byeEl && byeEl.getAttribute("data-names").indexOf(q) >= 0;
+  el("findnote").textContent = !q ? "" : hit ? hit.getAttribute("data-label") : byeHit ? "You have the bye this round." : "No one by that name this round.";
+  if(hit && el("find") === document.activeElement) hit.scrollIntoView({block:"nearest", behavior:"smooth"});
+}
+
+async function load(quiet){
+  try{
+    var rows = await readTab(TAB);
+    var key = JSON.stringify(rows);
+    if(quiet && key === last) return;
+    last = key;
+    paint(rows);
+  }catch(e){
+    if(quiet) return;
+    el("evsub").textContent = "Not loaded";
+    el("body").innerHTML = '<div class="msg"><b>Could not load the pairings</b>' + esc(e.message) + '. Try Refresh in a moment.</div>';
+  }
+}
+
+/* Remember the name typed in, so a returning player lands on their table. */
+try{ el("find").value = localStorage.getItem("triton-find") || ""; }catch(e){}
+el("find").addEventListener("input", function(){
+  try{ localStorage.setItem("triton-find", el("find").value); }catch(e){}
+  applyFind();
+});
+el("btn-reload").addEventListener("click", function(){ load(false); });
+setInterval(function(){ if(!document.hidden) load(true); }, REFRESH_MS);
+document.addEventListener("visibilitychange", function(){ if(!document.hidden) load(true); });
+load(false);
+})();
+</script>
+</body>
+</html>
