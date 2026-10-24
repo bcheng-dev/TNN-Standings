@@ -131,6 +131,10 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
       <div class="sub" id="evsub">Loading</div>
     </div>
     <select id="pick" aria-label="Event" hidden></select>
+    <select id="rankby" aria-label="Rank by">
+      <option value="mmr">Rank by MMR</option>
+      <option value="score">Rank by score</option>
+    </select>
     <button class="dbtn" id="btn-reload">Refresh</button>
   </div>
 </header>
@@ -407,6 +411,26 @@ function problem(title, detail, steps){
   el("foot").textContent = "";
 }
 
+/* ---------- ranking ----------
+   MMR ranks by rating. Score ranks by record: net wins (W minus L) first, then
+   more wins, then net games, then rating as the last tiebreak. */
+function rankBy(){ return el("rankby").value === "score" ? "score" : "mmr"; }
+function sortPlayers(players){
+  var byMmr = function(a, b){ return b.end - a.end || a.name.localeCompare(b.name); };
+  if(rankBy() !== "score") return players.sort(byMmr);
+  return players.sort(function(a, b){
+    return (num(b.w) - num(b.l)) - (num(a.w) - num(a.l)) ||
+           num(b.w) - num(a.w) ||
+           (num(b.gw) - num(b.gl)) - (num(a.gw) - num(a.gl)) ||
+           byMmr(a, b);
+  });
+}
+function rankNote(){
+  return rankBy() === "score"
+    ? " Ranked by score: net wins, then wins, then net games, then MMR."
+    : " Ranked by MMR.";
+}
+
 /* ---------- loading ---------- */
 
 var EVENTS = [], MATCHES = [], RATINGS = [], DATES = [];
@@ -432,9 +456,7 @@ function matchesFor(date){
 }
 
 function showEvent(date){
-  var players = eventsFor(date).sort(function(a, b){
-    return b.end - a.end || a.name.localeCompare(b.name);
-  });
+  var players = sortPlayers(eventsFor(date));
   var matches = matchesFor(date);
   if(!players.length){
     problem("Nothing recorded for that date",
@@ -448,7 +470,7 @@ function showEvent(date){
     "",
     "Final standings",
     "Read from the Event Log and Match Log tabs of the Triton MMR sheet. " +
-    "Click a player for their matches. The line traces how each game went for them.");
+    "Click a player for their matches. The line traces how each game went for them." + rankNote());
 }
 
 function showAllTime(allPlayers){
@@ -456,11 +478,12 @@ function showAllTime(allPlayers){
   var players = RATINGS.map(function(r){
       return {name:String(r["Player"] || ""), category:String(r["Category"] || ""),
               events:num(r["Events"]), w:num(r["Matches W"]), l:num(r["Matches L"]),
+              gw:num(r["Games W"]), gl:num(r["Games L"]),
               end:num(r["Rating"]), start:firstSeenRating(String(r["Player"] || "")),
               change:0, perf:null};
     })
-    .filter(function(p){ return p.name && p.events > 0 && !isJudge(p.name, p.category) && (allPlayers || !isExcluded(p.name)); })
-    .sort(function(a, b){ return b.end - a.end || a.name.localeCompare(b.name); });
+    .filter(function(p){ return p.name && p.events > 0 && !isJudge(p.name, p.category) && (allPlayers || !isExcluded(p.name)); });
+  players = sortPlayers(players);
 
   if(!players.length){
     problem("No ladder yet", "The Ratings tab has no players with an event on record.");
@@ -481,7 +504,7 @@ function showAllTime(allPlayers){
     allPlayers ? "All-time standings · all players" : "All-time standings · UCSD",
     "From the Ratings tab. Players with no events on record are left out. " +
     "Click a player for every match they have on record. Matches against a judge" +
-    (allPlayers ? "" : " or a non-UCSD player") + " show the opponent as Guest.");
+    (allPlayers ? "" : " or a non-UCSD player") + " show the opponent as Guest." + rankNote());
 }
 
 /* Where this player's rating began, from their earliest event on record, so the
@@ -582,6 +605,17 @@ function render(){
 }
 
 el("pick").addEventListener("change", render);
+
+/* The choice sticks between visits; ?rank=score in a link picks it too. */
+(function(){
+  var saved = qs.get("rank");
+  try{ saved = saved || localStorage.getItem("triton-rankby"); }catch(e){}
+  if(saved === "score" || saved === "mmr") el("rankby").value = saved;
+})();
+el("rankby").addEventListener("change", function(){
+  try{ localStorage.setItem("triton-rankby", rankBy()); }catch(e){}
+  if(EVENTS.length) render();
+});
 el("btn-reload").addEventListener("click", boot);
 
 boot();
