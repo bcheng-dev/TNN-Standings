@@ -348,7 +348,7 @@ function rowHTML(p, rank, matches){
       '<span class="rank">' + rank + '</span>' +
       '<span class="nm">' + esc(displayName(p.name)) + '</span>' +
       evs +
-      '<span class="wl">' + num(p.w) + "–" + num(p.l) + '</span>' +
+      '<span class="wl" title="Wins–losses–draws">' + num(p.w) + "–" + num(p.l) + "–" + num(p.d) + '</span>' +
       '<span class="gap"></span>' +
       sparkline(trackOf(p, matches)) +
       '<span class="chev"></span>' +
@@ -422,13 +422,14 @@ function sortPlayers(players){
   return players.sort(function(a, b){
     return (num(b.w) - num(b.l)) - (num(a.w) - num(a.l)) ||
            num(b.w) - num(a.w) ||
+           num(b.d) - num(a.d) ||
            (num(b.gw) - num(b.gl)) - (num(a.gw) - num(a.gl)) ||
            byMmr(a, b);
   });
 }
 function rankNote(){
   return rankBy() === "score"
-    ? " Ranked by score: net wins, then wins, then net games, then MMR."
+    ? " Ranked by score: net wins, then wins, then draws, then net games, then MMR."
     : " Ranked by MMR.";
 }
 
@@ -436,12 +437,24 @@ function rankNote(){
 
 var EVENTS = [], MATCHES = [], RATINGS = [], DATES = [];
 
+/* Draws are not a column on the Event Log or Ratings tabs, so they are counted
+   from the Match Log: one row per player per match. date null counts every event. */
+function drawsOf(name, date){
+  var k = key(name), n = 0;
+  MATCHES.forEach(function(r){
+    if(key(r["Player"]) !== k || String(r["Result"]).toLowerCase() !== "draw") return;
+    if(date && asDate(r["Date"]) !== date) return;
+    n++;
+  });
+  return n;
+}
+
 /* Event Log gives the ladder, Match Log gives the detail and the trend. */
 function eventsFor(date){
   return EVENTS.filter(function(r){ return asDate(r["Date"]) === date; }).map(function(r){
     return {name:String(r["Player"] || ""), category:String(r["Category"] || ""),
             start:num(r["Start MMR"]), end:num(r["End MMR"]), change:num(r["Change"]),
-            w:num(r["Matches W"]), l:num(r["Matches L"]),
+            w:num(r["Matches W"]), l:num(r["Matches L"]), d:drawsOf(r["Player"], date),
             gw:num(r["Games W"]), gl:num(r["Games L"]),
             perf:num(r["Perf"]) || null, events:null};
   }).filter(function(p){ return p.name && !isJudge(p.name, p.category) && !isExcluded(p.name); });
@@ -479,7 +492,7 @@ function showAllTime(allPlayers){
   var players = RATINGS.map(function(r){
       return {name:String(r["Player"] || ""), category:String(r["Category"] || ""),
               events:num(r["Events"]), w:num(r["Matches W"]), l:num(r["Matches L"]),
-              gw:num(r["Games W"]), gl:num(r["Games L"]),
+              gw:num(r["Games W"]), gl:num(r["Games L"]), d:drawsOf(r["Player"], null),
               end:num(r["Rating"]), start:firstSeenRating(String(r["Player"] || "")),
               change:0, perf:null};
     })
