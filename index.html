@@ -88,6 +88,19 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
 .row.open .chev{transform:rotate(-135deg) translate(-2px,-2px)}
 
 .detail{border-top:1px solid var(--line);background:var(--card-2);padding:2px 13px 11px}
+.chart{position:relative;margin:10px 0 4px;min-height:170px;cursor:crosshair;touch-action:pan-y}
+.chart svg{display:block}
+.ch-ax{font-family:var(--mono);font-size:10.5px;fill:var(--muted)}
+.ch-ax .up{fill:var(--good)} .ch-ax .down{fill:var(--bad)} .ch-ax .flatc{fill:var(--muted)}
+.ch-base{stroke:var(--line);stroke-dasharray:2 3}
+.ch-sep{stroke:var(--line);stroke-dasharray:4 4}
+.ch-cur{stroke:var(--muted);stroke-width:1}
+.ch-dot{stroke:var(--card);stroke-width:2}
+.ch-tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;
+  padding:6px 9px;font-size:12px;line-height:1.45;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:2}
+.ch-tip b{display:block;font-weight:600}
+.ch-tip span{display:block;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.ch-tip em{font-style:normal;font-weight:600}
 .match{display:grid;grid-template-columns:auto 1fr auto;gap:3px 11px;align-items:baseline;
   padding-block:10px;border-bottom:1px solid var(--line)}
 .match:last-of-type{border-bottom:0}
@@ -135,8 +148,8 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
     </div>
     <select id="pick" aria-label="Event" hidden></select>
     <select id="rankby" aria-label="Rank by">
+      <option value="score" selected>Rank by points</option>
       <option value="mmr">Rank by MMR</option>
-      <option value="score">Rank by points</option>
     </select>
     <a class="dbtn" href="pairings.html" style="text-decoration:none">Pairings</a>
     <button class="dbtn" id="btn-reload">Refresh</button>
@@ -370,7 +383,9 @@ function detailHTML(p, matches){
   if(!mine.length){
     return '<p class="path">No matches on record for ' + esc(displayName(p.name)) + ' at this event.</p>';
   }
-  var rows = mine.map(function(m){
+  var cid = "c" + (++chartSeq);
+  CHARTS[cid] = chartPoints(p, mine.slice().reverse());
+  var rows = '<div class="chart" data-chart="' + cid + '"></div>' + mine.map(function(m){
     var r = readMatch(m);
     var seq = String(m.games || "").trim();
     return '<div class="match">' +
@@ -388,7 +403,101 @@ function detailHTML(p, matches){
   return rows;
 }
 
+/* ---------- the rating chart in an opened row ----------
+   Like a stock quote: one point per game, hover (or touch) for what that game
+   did. On the all-time views, dashed lines split the nights and each night is
+   labelled with its net change. Drawn when the row opens, at its real width. */
+var CHARTS = {}, chartSeq = 0;
+
+function chartPoints(p, games){
+  var pts = [{r:num(p.start), start:true}];
+  games.forEach(function(m){
+    var bye = String(m.result).toLowerCase() === "bye";
+    pts.push({r:num(m.after), before:num(m.after) - num(m.change), change:num(m.change),
+              when:m.when || "", round:num(m.round), opp:bye ? "" : m.opponent,
+              result:String(m.result || ""), score:String(m.score || ""), bye:bye});
+  });
+  return pts;
+}
+
+function drawChart(box){
+  if(!box) return;
+  var pts = CHARTS[box.getAttribute("data-chart")];
+  var W = box.clientWidth;
+  if(!pts || pts.length < 2 || !W) return;
+  var H = 170, L = 40, R = 12, T = 16, B = 24;
+  var lo = Math.min.apply(null, pts.map(function(q){ return q.r; }));
+  var hi = Math.max.apply(null, pts.map(function(q){ return q.r; }));
+  var padv = Math.max(4, (hi - lo) * 0.12); lo -= padv; hi += padv;
+  var X = function(i){ return L + i / (pts.length - 1) * (W - L - R); };
+  var Y = function(v){ return T + (hi - v) / (hi - lo) * (H - T - B); };
+  var up = pts[pts.length - 1].r >= pts[0].r, col = up ? "var(--good)" : "var(--bad)";
+  var line = pts.map(function(q, i){ return X(i).toFixed(1) + "," + Y(q.r).toFixed(1); }).join(" ");
+  var area = "M" + X(0).toFixed(1) + "," + (H - B) + " L" + line.split(" ").join(" L") +
+             " L" + X(pts.length - 1).toFixed(1) + "," + (H - B) + " Z";
+  var svg = '<svg width="' + W + '" height="' + H + '" aria-hidden="true">' +
+    '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(pts[0].r) + '" y2="' + Y(pts[0].r) + '" class="ch-base"/>' +
+    '<text x="' + (L - 6) + '" y="' + (Y(hi - padv) + 4) + '" class="ch-ax" text-anchor="end">' + Math.round(hi - padv) + '</text>' +
+    '<text x="' + (L - 6) + '" y="' + (Y(lo + padv) + 4) + '" class="ch-ax" text-anchor="end">' + Math.round(lo + padv) + '</text>';
+  /* Night boundaries and each night's net change, where there is more than one night. */
+  var nights = [], cur = null;
+  pts.forEach(function(q, i){
+    if(q.start) return;
+    if(!cur || cur.when !== q.when){ cur = {when:q.when, from:i, to:i, net:0}; nights.push(cur); }
+    cur.to = i; cur.net += q.change;
+  });
+  if(nights.length > 1 || (nights[0] && nights[0].when)){
+    nights.forEach(function(n, k){
+      var x0 = X(n.from - 1), x1 = X(n.to), mid = (x0 + x1) / 2, net = r1(n.net);
+      if(k > 0) svg += '<line x1="' + x0 + '" x2="' + x0 + '" y1="' + T + '" y2="' + (H - B) + '" class="ch-sep"/>';
+      svg += '<text x="' + mid + '" y="' + (H - 8) + '" class="ch-ax" text-anchor="middle">' + esc(shortDate(n.when)) +
+             ' <tspan class="' + dcls(net) + '">' + fmtDelta(net) + '</tspan></text>';
+    });
+  }
+  svg += '<path d="' + area + '" fill="' + col + '" opacity=".10"/>' +
+    '<polyline points="' + line + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+    pts.map(function(q, i){
+      return '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(q.r).toFixed(1) + '" r="2.6" fill="' +
+        (q.start ? "var(--muted)" : q.change > 0 ? "var(--good)" : q.change < 0 ? "var(--bad)" : "var(--muted)") + '"/>';
+    }).join("") +
+    '<line class="ch-cur" y1="' + T + '" y2="' + (H - B) + '" hidden/>' +
+    '<circle class="ch-dot" r="5" hidden/></svg><div class="ch-tip" hidden></div>';
+  box.innerHTML = svg;
+
+  var cur2 = box.querySelector(".ch-cur"), dot = box.querySelector(".ch-dot"), tip = box.querySelector(".ch-tip");
+  function show(clientX){
+    var rect = box.getBoundingClientRect();
+    var i = Math.round((clientX - rect.left - L) / (W - L - R) * (pts.length - 1));
+    i = Math.max(0, Math.min(pts.length - 1, i));
+    var q = pts[i], x = X(i), y = Y(q.r);
+    cur2.setAttribute("x1", x); cur2.setAttribute("x2", x); cur2.removeAttribute("hidden");
+    dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.removeAttribute("hidden");
+    dot.setAttribute("fill", q.change > 0 ? "var(--good)" : q.change < 0 ? "var(--bad)" : "var(--muted)");
+    tip.innerHTML = q.start
+      ? '<b>Starting rating</b><span>' + Math.round(q.r) + ' MMR</span>'
+      : '<b>' + (q.when ? esc(shortDate(q.when)) + ' · ' : '') + 'R' + q.round +
+          (q.bye ? ' · bye' : ' vs ' + esc(q.opp)) + '</b>' +
+        '<span>' + esc(q.result) + (q.score && !q.bye ? ' ' + esc(q.score) : '') + '</span>' +
+        '<span>' + r1(q.before) + ' → ' + r1(q.r) + ' <em class="' + dcls(q.change) + '">' + fmtDelta(q.change) + '</em></span>';
+    tip.hidden = false;
+    var tw = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(W - tw, x - tw / 2)) + "px";
+    tip.style.top = Math.max(0, y - tip.offsetHeight - 12) + "px";
+  }
+  function hide(){ cur2.setAttribute("hidden", ""); dot.setAttribute("hidden", ""); tip.hidden = true; }
+  box.onmousemove = function(e){ show(e.clientX); };
+  box.onmouseleave = hide;
+  box.ontouchstart = box.ontouchmove = function(e){ if(e.touches[0]) show(e.touches[0].clientX); };
+  box.ontouchend = function(){ setTimeout(hide, 1500); };
+}
+var resizeT = null;
+window.addEventListener("resize", function(){
+  clearTimeout(resizeT);
+  resizeT = setTimeout(function(){ document.querySelectorAll(".row.open .chart").forEach(drawChart); }, 150);
+});
+
 function paint(players, matches, head, strip, section, foot){
+  CHARTS = {};
   el("evsub").textContent = head;
   el("strip").hidden = !strip;
   if(strip) el("strip").innerHTML = strip;
@@ -404,6 +513,7 @@ function paint(players, matches, head, strip, section, foot){
       var open = row.classList.toggle("open");
       b.setAttribute("aria-expanded", open ? "true" : "false");
       row.querySelector(".detail").hidden = !open;
+      if(open) drawChart(row.querySelector(".chart"));
     });
   });
 }
@@ -486,7 +596,8 @@ function nexusOf(name, date){
     if(date && asDate(r["Date"]) !== date) return;
     n += num(r["Points"]);
   });
-  return Math.round(n * 10) / 10;
+  /* A balance never shows below zero, even if a redemption was over-entered. */
+  return Math.max(date ? -Infinity : 0, Math.round(n * 10) / 10);
 }
 function readNexus(){
   return readTab(TAB_NEXUS).then(function(rows){
@@ -625,6 +736,7 @@ async function refresh(){
       row.classList.add("open");
       row.querySelector(".head").setAttribute("aria-expanded", "true");
       row.querySelector(".detail").hidden = false;
+      drawChart(row.querySelector(".chart"));
     });
     window.scrollTo(0, y);
   }catch(e){
@@ -686,14 +798,9 @@ function render(){
 
 el("pick").addEventListener("change", render);
 
-/* The choice sticks between visits; ?rank=score in a link picks it too. */
-(function(){
-  var saved = qs.get("rank");
-  try{ saved = saved || localStorage.getItem("triton-rankby"); }catch(e){}
-  if(saved === "score" || saved === "mmr") el("rankby").value = saved;
-})();
+/* Every visit opens ranked by points; ?rank=mmr in a link opens on MMR instead. */
+if(qs.get("rank") === "mmr") el("rankby").value = "mmr";
 el("rankby").addEventListener("change", function(){
-  try{ localStorage.setItem("triton-rankby", rankBy()); }catch(e){}
   if(EVENTS.length) render();
 });
 el("btn-reload").addEventListener("click", boot);
