@@ -534,7 +534,10 @@ function problem(title, detail, steps){
    the stronger schedule (opponents' match win %), then game win %, then rating. */
 var WIN_PTS = 3, DRAW_PTS = 1, BYE_PTS = 3, OMW_FLOOR = 1 / 3;
 
-function rankBy(){ return el("rankby").value === "score" ? "score" : "mmr"; }
+/* Points only decide placement within one night, so the all-time views always rank
+   by MMR and the picker is hidden there. */
+function isAllTime(){ var v = el("pick").value; return v === "__all" || v === "__allx" || !v; }
+function rankBy(){ return !isAllTime() && el("rankby").value === "score" ? "score" : "mmr"; }
 function sortPlayers(players){
   var byMmr = function(a, b){ return b.end - a.end || a.name.localeCompare(b.name); };
   if(rankBy() !== "score") return players.sort(byMmr);
@@ -672,7 +675,7 @@ function showAllTime(allPlayers){
               change:0, perf:null};
     })
     .filter(function(p){ return p.name && p.events > 0 && !isJudge(p.name, p.category) && (allPlayers || !isExcluded(p.name)); });
-  players = sortPlayers(withScores(players, null).map(function(p){
+  players = sortPlayers(players.map(function(p){
     p.np = nexusOf(p.name, null); return p;
   }));
 
@@ -791,6 +794,7 @@ async function boot(){
 
 function render(){
   var v = selected();
+  el("rankby").hidden = isAllTime();
   if(v === "__all") showAllTime(false);
   else if(v === "__allx") showAllTime(true);
   else showEvent(v);
