@@ -78,6 +78,9 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .p1 .nm,.p2 .nm,.p3 .nm{font-weight:600}
 .evs,.wl{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.pts{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.np{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.04em;padding:1px 6px;border-radius:999px;
+  color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 45%,transparent);flex:0 0 auto}
 .gap{flex:1 1 auto;min-width:10px}
 .spark{flex:0 0 auto;width:62px;height:18px;display:block}
 .chev{flex:0 0 auto;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
@@ -133,7 +136,7 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
     <select id="pick" aria-label="Event" hidden></select>
     <select id="rankby" aria-label="Rank by">
       <option value="mmr">Rank by MMR</option>
-      <option value="score">Rank by score</option>
+      <option value="score">Rank by points</option>
     </select>
     <a class="dbtn" href="pairings.html" style="text-decoration:none">Pairings</a>
     <button class="dbtn" id="btn-reload">Refresh</button>
@@ -158,7 +161,7 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
    endpoint, which any sheet shared as "anyone with the link can view" serves
    with CORS. No Apps Script, no deployment, nothing to keep in step. */
 var SHEET_ID = "1dbezzcgyLVsv_yz_8CfBQmcrI_2_u9AjZ5hjyAaqIRo";
-var TAB_EVENTS = "Event Log", TAB_MATCHES = "Match Log", TAB_RATINGS = "Ratings";
+var TAB_EVENTS = "Event Log", TAB_MATCHES = "Match Log", TAB_RATINGS = "Ratings", TAB_NEXUS = "Nexus Ledger";
 
 var qs = new URLSearchParams(location.search);
 if(qs.get("sheet")) SHEET_ID = qs.get("sheet");
@@ -349,7 +352,10 @@ function rowHTML(p, rank, matches){
       '<span class="nm">' + esc(displayName(p.name)) + '</span>' +
       evs +
       '<span class="wl" title="Wins–losses–draws">' + num(p.w) + "–" + num(p.l) + "–" + num(p.d) + '</span>' +
+      (rankBy() === "score" ? '<span class="pts" title="Event points: 3 a win, 1 a draw">' + num(p.pts) + ' pts</span>' : '') +
       '<span class="gap"></span>' +
+      (p.np ? '<span class="np" title="' + (p.events === null || p.events === undefined ? "Nexus Points earned at this event" : "Nexus Points balance") + '">' +
+        (p.events === null || p.events === undefined ? "+" : "") + num(p.np) + ' NP</span>' : '') +
       sparkline(trackOf(p, matches)) +
       '<span class="chev"></span>' +
     '</button>' +
@@ -413,24 +419,80 @@ function problem(title, detail, steps){
 }
 
 /* ---------- ranking ----------
-   MMR ranks by rating. Score ranks by record: net wins (W minus L) first, then
-   more wins, then net games, then rating as the last tiebreak. */
+   MMR ranks by rating. Points ranks by event points, the usual Swiss scoring:
+   3 for a win, 1 for a draw, 0 for a loss, and a bye counts as a win. Ties go to
+   the stronger schedule (opponents' match win %), then game win %, then rating. */
+var WIN_PTS = 3, DRAW_PTS = 1, BYE_PTS = 3, OMW_FLOOR = 1 / 3;
+
 function rankBy(){ return el("rankby").value === "score" ? "score" : "mmr"; }
 function sortPlayers(players){
   var byMmr = function(a, b){ return b.end - a.end || a.name.localeCompare(b.name); };
   if(rankBy() !== "score") return players.sort(byMmr);
   return players.sort(function(a, b){
-    return (num(b.w) - num(b.l)) - (num(a.w) - num(a.l)) ||
-           num(b.w) - num(a.w) ||
-           num(b.d) - num(a.d) ||
-           (num(b.gw) - num(b.gl)) - (num(a.gw) - num(a.gl)) ||
+    return num(b.pts) - num(a.pts) ||
+           num(b.omw) - num(a.omw) ||
+           num(b.gwp) - num(a.gwp) ||
            byMmr(a, b);
   });
 }
 function rankNote(){
   return rankBy() === "score"
-    ? " Ranked by score: net wins, then wins, then draws, then net games, then MMR."
+    ? " Ranked by event points: 3 a win, 1 a draw, 0 a loss, a bye counts as a win. Ties go to opponents' match win %, then game win %, then MMR."
     : " Ranked by MMR.";
+}
+
+/* Points, schedule strength and game win % for every player, from the Match Log
+   rows of one night (date) or of every night (null). A judge's own record counts
+   toward their opponents' schedule, since they played real games. */
+function scoreTable(date){
+  var t = {};
+  var get = function(n){ var k = key(n); return t[k] || (t[k] = {pts:0, mp:0, w:0, d:0, gw:0, gl:0, opps:[]}); };
+  MATCHES.forEach(function(r){
+    if(date && asDate(r["Date"]) !== date) return;
+    var e = get(r["Player"]), res = String(r["Result"]).toLowerCase();
+    if(res === "bye"){ e.pts += BYE_PTS; return; }
+    e.mp++;
+    if(res === "win"){ e.pts += WIN_PTS; e.w++; }
+    else if(res === "draw"){ e.pts += DRAW_PTS; e.d++; }
+    var sc = String(r["Score"] || "").split("-");
+    e.gw += num(sc[0]); e.gl += num(sc[1]);
+    e.opps.push(key(r["Opponent"]));
+  });
+  var mwp = function(e){ return e && e.mp ? Math.max(OMW_FLOOR, (WIN_PTS * e.w + DRAW_PTS * e.d) / (WIN_PTS * e.mp)) : OMW_FLOOR; };
+  Object.keys(t).forEach(function(k){
+    var e = t[k];
+    e.omw = e.opps.length ? e.opps.reduce(function(a, o){ return a + mwp(t[o]); }, 0) / e.opps.length : 0;
+    e.gwp = (e.gw + e.gl) ? e.gw / (e.gw + e.gl) : 0;
+  });
+  return t;
+}
+function withScores(players, date){
+  var t = scoreTable(date);
+  return players.map(function(p){
+    var e = t[key(p.name)] || {};
+    p.pts = e.pts || 0; p.omw = e.omw || 0; p.gwp = e.gwp || 0;
+    return p;
+  });
+}
+
+/* Nexus Points come from the Nexus Ledger tab: one row per award or redemption,
+   so a balance is just the sum of a player's rows. date limits it to one night's
+   awards. A missing tab simply shows no points. */
+var NEXUS = [];
+function nexusOf(name, date){
+  var k = key(name), n = 0;
+  NEXUS.forEach(function(r){
+    if(key(r["Player"]) !== k) return;
+    if(date && asDate(r["Date"]) !== date) return;
+    n += num(r["Points"]);
+  });
+  return Math.round(n * 10) / 10;
+}
+function readNexus(){
+  return readTab(TAB_NEXUS).then(function(rows){
+    /* Google answers a missing tab with the first one, so check it is the ledger. */
+    return rows.length && ("Points" in rows[0]) && !("Rating" in rows[0]) ? rows : [];
+  }, function(){ return []; });
 }
 
 /* ---------- loading ---------- */
@@ -470,7 +532,9 @@ function matchesFor(date){
 }
 
 function showEvent(date){
-  var players = sortPlayers(eventsFor(date));
+  var players = sortPlayers(withScores(eventsFor(date), date).map(function(p){
+    p.np = nexusOf(p.name, date); return p;
+  }));
   var matches = matchesFor(date);
   if(!players.length){
     problem("Nothing recorded for that date",
@@ -497,7 +561,9 @@ function showAllTime(allPlayers){
               change:0, perf:null};
     })
     .filter(function(p){ return p.name && p.events > 0 && !isJudge(p.name, p.category) && (allPlayers || !isExcluded(p.name)); });
-  players = sortPlayers(players);
+  players = sortPlayers(withScores(players, null).map(function(p){
+    p.np = nexusOf(p.name, null); return p;
+  }));
 
   if(!players.length){
     problem("No ladder yet", "The Ratings tab has no players with an event on record.");
@@ -546,10 +612,10 @@ async function refresh(){
   if(refreshing || document.hidden || !DATES) return;
   refreshing = true;
   try{
-    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS)]);
-    var before = JSON.stringify([EVENTS, MATCHES, RATINGS]);
-    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2];
-    if(JSON.stringify([EVENTS, MATCHES, RATINGS]) === before) return;
+    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS), readNexus()]);
+    var before = JSON.stringify([EVENTS, MATCHES, RATINGS, NEXUS]);
+    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2]; NEXUS = got[3];
+    if(JSON.stringify([EVENTS, MATCHES, RATINGS, NEXUS]) === before) return;
     var open = [].map.call(document.querySelectorAll(".row.open .nm"), function(n){ return n.textContent; });
     var y = window.scrollY;
     buildPicker(selected());
@@ -593,8 +659,8 @@ function buildPicker(keep){
 async function boot(){
   el("body").innerHTML = '<div class="msg"><b>Loading</b>Reading the Triton MMR sheet.</div>';
   try{
-    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS)]);
-    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2];
+    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS), readNexus()]);
+    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2]; NEXUS = got[3];
   }catch(e){
     problem("Could not read the sheet", e.message + ".", [
       "In the sheet: Share, then General access set to <b>Anyone with the link</b>, role <b>Viewer</b>.",
