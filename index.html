@@ -79,8 +79,6 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
 .p1 .nm,.p2 .nm,.p3 .nm{font-weight:600}
 .evs,.wl{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
 .pts{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.np{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.04em;padding:1px 6px;border-radius:999px;
-  color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 45%,transparent);flex:0 0 auto}
 .gap{flex:1 1 auto;min-width:10px}
 .spark{flex:0 0 auto;width:62px;height:18px;display:block}
 .chev{flex:0 0 auto;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
@@ -174,7 +172,7 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
    endpoint, which any sheet shared as "anyone with the link can view" serves
    with CORS. No Apps Script, no deployment, nothing to keep in step. */
 var SHEET_ID = "1dbezzcgyLVsv_yz_8CfBQmcrI_2_u9AjZ5hjyAaqIRo";
-var TAB_EVENTS = "Event Log", TAB_MATCHES = "Match Log", TAB_RATINGS = "Ratings", TAB_NEXUS = "Nexus Ledger";
+var TAB_EVENTS = "Event Log", TAB_MATCHES = "Match Log", TAB_RATINGS = "Ratings";
 
 var qs = new URLSearchParams(location.search);
 if(qs.get("sheet")) SHEET_ID = qs.get("sheet");
@@ -367,8 +365,6 @@ function rowHTML(p, rank, matches){
       '<span class="wl" title="Wins–losses–draws">' + num(p.w) + "–" + num(p.l) + "–" + num(p.d) + '</span>' +
       (rankBy() === "score" ? '<span class="pts" title="Event points: 3 a win, 1 a draw">' + num(p.pts) + ' pts</span>' : '') +
       '<span class="gap"></span>' +
-      (p.np ? '<span class="np" title="' + (p.events === null || p.events === undefined ? "Nexus Points earned at this event" : "Nexus Points balance") + '">' +
-        (p.events === null || p.events === undefined ? "+" : "") + num(p.np) + ' NP</span>' : '') +
       sparkline(trackOf(p, matches)) +
       '<span class="chev"></span>' +
     '</button>' +
@@ -588,26 +584,7 @@ function withScores(players, date){
   });
 }
 
-/* Nexus Points come from the Nexus Ledger tab: one row per award or redemption,
-   so a balance is just the sum of a player's rows. date limits it to one night's
-   awards. A missing tab simply shows no points. */
-var NEXUS = [];
-function nexusOf(name, date){
-  var k = key(name), n = 0;
-  NEXUS.forEach(function(r){
-    if(key(r["Player"]) !== k) return;
-    if(date && asDate(r["Date"]) !== date) return;
-    n += num(r["Points"]);
-  });
-  /* A balance never shows below zero, even if a redemption was over-entered. */
-  return Math.max(date ? -Infinity : 0, Math.round(n * 10) / 10);
-}
-function readNexus(){
-  return readTab(TAB_NEXUS).then(function(rows){
-    /* Google answers a missing tab with the first one, so check it is the ledger. */
-    return rows.length && ("Points" in rows[0]) && !("Rating" in rows[0]) ? rows : [];
-  }, function(){ return []; });
-}
+/* Nexus Point balances are private, so this page does not read the Nexus Ledger. */
 
 /* ---------- loading ---------- */
 
@@ -646,9 +623,7 @@ function matchesFor(date){
 }
 
 function showEvent(date){
-  var players = sortPlayers(withScores(eventsFor(date), date).map(function(p){
-    p.np = nexusOf(p.name, date); return p;
-  }));
+  var players = sortPlayers(withScores(eventsFor(date), date));
   var matches = matchesFor(date);
   if(!players.length){
     problem("Nothing recorded for that date",
@@ -675,9 +650,7 @@ function showAllTime(allPlayers){
               change:0, perf:null};
     })
     .filter(function(p){ return p.name && p.events > 0 && !isJudge(p.name, p.category) && (allPlayers || !isExcluded(p.name)); });
-  players = sortPlayers(players.map(function(p){
-    p.np = nexusOf(p.name, null); return p;
-  }));
+  players = sortPlayers(players);
 
   if(!players.length){
     problem("No ladder yet", "The Ratings tab has no players with an event on record.");
@@ -726,10 +699,10 @@ async function refresh(){
   if(refreshing || document.hidden || !DATES) return;
   refreshing = true;
   try{
-    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS), readNexus()]);
-    var before = JSON.stringify([EVENTS, MATCHES, RATINGS, NEXUS]);
-    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2]; NEXUS = got[3];
-    if(JSON.stringify([EVENTS, MATCHES, RATINGS, NEXUS]) === before) return;
+    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS)]);
+    var before = JSON.stringify([EVENTS, MATCHES, RATINGS]);
+    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2];
+    if(JSON.stringify([EVENTS, MATCHES, RATINGS]) === before) return;
     var open = [].map.call(document.querySelectorAll(".row.open .nm"), function(n){ return n.textContent; });
     var y = window.scrollY;
     buildPicker(selected());
@@ -774,8 +747,8 @@ function buildPicker(keep){
 async function boot(){
   el("body").innerHTML = '<div class="msg"><b>Loading</b>Reading the Triton MMR sheet.</div>';
   try{
-    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS), readNexus()]);
-    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2]; NEXUS = got[3];
+    var got = await Promise.all([readTab(TAB_EVENTS), readTab(TAB_MATCHES), readTab(TAB_RATINGS)]);
+    EVENTS = got[0]; MATCHES = got[1]; RATINGS = got[2];
   }catch(e){
     problem("Could not read the sheet", e.message + ".", [
       "In the sheet: Share, then General access set to <b>Anyone with the link</b>, role <b>Viewer</b>.",
