@@ -54,6 +54,17 @@ button,select{font:inherit;color:inherit}
 .mark span{color:var(--gold)}
 .sub{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:2px}
 .grow{flex:1 1 auto;min-width:0}
+/* The controls stay together on one line whichever view is picked: beside the
+   title on wide screens, on their own row on phones. */
+.ctrls{display:flex;gap:8px;align-items:center;flex:0 1 auto;min-width:0;flex-wrap:nowrap}
+.ctrls select{min-width:0;text-overflow:ellipsis}
+.ctrls #pick{max-width:175px}
+.ctrls #rankby{flex:0 0 auto}
+.ctrls .dbtn{flex:0 0 auto;white-space:nowrap}
+.sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-in{flex-wrap:nowrap}
+.mark{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){ .top-in{flex-wrap:wrap} .ctrls{flex:1 1 100%;gap:6px} .ctrls #pick{flex:1 1 auto;max-width:none} .ctrls select,.ctrls .dbtn{padding:6px 8px} }
 .dbtn,select{border:1px solid var(--line);background:var(--card-2);color:var(--ink);border-radius:8px;padding:6px 11px;font-size:14px;cursor:pointer;max-width:100%}
 .dbtn:hover,select:hover{border-color:var(--accent)}
 .dbtn:focus-visible,select:focus-visible,.head:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -144,13 +155,15 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
       <div class="mark">Triton <span>Standings</span></div>
       <div class="sub" id="evsub">Loading</div>
     </div>
-    <select id="pick" aria-label="Event" hidden></select>
-    <select id="rankby" aria-label="Rank by">
-      <option value="score" selected>Rank by points</option>
-      <option value="mmr">Rank by MMR</option>
-    </select>
-    <a class="dbtn" href="pairings.html" style="text-decoration:none">Pairings</a>
-    <button class="dbtn" id="btn-reload">Refresh</button>
+    <div class="ctrls">
+      <select id="pick" aria-label="Event" hidden></select>
+      <select id="rankby" aria-label="Rank by">
+        <option value="score" selected>By points</option>
+        <option value="mmr">By MMR</option>
+      </select>
+      <a class="dbtn" href="pairings.html" style="text-decoration:none">Pairings</a>
+      <button class="dbtn" id="btn-reload">Refresh</button>
+    </div>
   </div>
 </header>
 
@@ -263,6 +276,13 @@ function shortDate(iso){
   if(p.length !== 3) return iso || "";
   var d = new Date(+p[0], +p[1] - 1, +p[2]);
   return isNaN(d) ? iso : d.toLocaleDateString(undefined, {month:"numeric", day:"numeric"});
+}
+/* "Fri, Oct 23" for the event picker, so it fits beside the other controls. */
+function pickLabel(iso){
+  var p = String(iso || "").split("-");
+  if(p.length !== 3) return iso || "";
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  return isNaN(d) ? iso : d.toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"});
 }
 function prettyDate(iso){
   var p = String(iso || "").split("-");
@@ -738,7 +758,7 @@ function buildPicker(keep){
   pick.innerHTML = '<option value="__all">All-time (UCSD)</option>' +
     '<option value="__allx">All-time (all players)</option>' +
     DATES.map(function(d){
-      return '<option value="' + esc(d) + '">' + esc(prettyDate(d)) + '</option>';
+      return '<option value="' + esc(d) + '">' + esc(pickLabel(d)) + '</option>';
     }).join("");
   pick.hidden = false;
   pick.value = (keep === "__all" || keep === "__allx" || DATES.indexOf(keep) >= 0) ? keep : "__all";
