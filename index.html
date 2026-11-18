@@ -390,8 +390,8 @@ function rowHTML(p, rank, matches){
       (rankBy() === "score" ? '<span class="pts" title="Event points: 3 a win, 1 a draw">' + num(p.pts) + ' pts</span>' +
         '<span class="tb" title="Tiebreakers, in order: opponents\u2019 match win %, game win %, opponents\u2019 game win %">' +
         tbText(p) + '</span>' : '') +
-      (rankBy() === "alltime" ? '<span class="tb" title="Opponents\u2019 match win % and opponents\u2019 game win %, across every night">' +
-        "OMW " + pctOf(p.omw) + " \u00b7 OGW " + pctOf(p.ogw) + '</span>' : '') +
+      (rankBy() === "alltime" ? '<span class="tb" title="Tiebreakers after events, wins and draws, across every night">' +
+        "OGW " + pctOf(p.ogw) + " \u00b7 OMW " + pctOf(p.omw) + " \u00b7 GW " + pctOf(p.gwp) + '</span>' : '') +
       '<span class="gap"></span>' +
       sparkline(trackOf(p, matches)) +
       '<span class="chev"></span>' +
@@ -410,7 +410,7 @@ function detailHTML(p, matches){
   var tb = rankBy() === "score"
     ? '<p class="tbline"><b>' + num(p.pts) + ' pts</b> \u00b7 ' + tbText(p) + '</p>'
     : rankBy() === "alltime"
-    ? '<p class="tbline"><b>' + num(p.events) + (num(p.events) === 1 ? ' event' : ' events') + '</b> \u00b7 OMW ' + pctOf(p.omw) + ' \u00b7 OGW ' + pctOf(p.ogw) + '</p>' : '';
+    ? '<p class="tbline"><b>' + num(p.events) + (num(p.events) === 1 ? ' event' : ' events') + '</b> \u00b7 OGW ' + pctOf(p.ogw) + ' \u00b7 OMW ' + pctOf(p.omw) + ' \u00b7 GW ' + pctOf(p.gwp) + '</p>' : '';
   var cid = "c" + (++chartSeq);
   CHARTS[cid] = chartPoints(p, mine.slice().reverse());
   var rows = tb + '<div class="chart" data-chart="' + cid + '"></div>' + mine.map(function(m){
@@ -565,16 +565,20 @@ function problem(title, detail, steps){
 var WIN_PTS = 3, DRAW_PTS = 1, BYE_PTS = 3, OMW_FLOOR = 1 / 3;
 
 /* Points only decide placement within one night. The all-time views rank by how
-   many events a player has come to, then by the strength of everyone they have
-   played (OMW, then OGW, across every night), then MMR; the picker is hidden there. */
+   many events a player has come to, then wins, then draws, then the tiebreakers
+   across every night: opponents' game win % (OGW), opponents' match win % (OMW),
+   their own game win % (GW), and MMR last. The picker is hidden there. */
 function isAllTime(){ var v = el("pick").value; return v === "__all" || v === "__allx" || !v; }
 function rankBy(){ return isAllTime() ? "alltime" : el("rankby").value === "score" ? "score" : "mmr"; }
 function sortPlayers(players){
   var byMmr = function(a, b){ return b.end - a.end || a.name.localeCompare(b.name); };
   if(rankBy() === "alltime") return players.sort(function(a, b){
     return num(b.events) - num(a.events) ||
-           num(b.omw) - num(a.omw) ||
+           num(b.w) - num(a.w) ||
+           num(b.d) - num(a.d) ||
            num(b.ogw) - num(a.ogw) ||
+           num(b.omw) - num(a.omw) ||
+           num(b.gwp) - num(a.gwp) ||
            byMmr(a, b);
   });
   if(rankBy() !== "score") return players.sort(byMmr);
@@ -587,7 +591,7 @@ function sortPlayers(players){
   });
 }
 function rankNote(){
-  if(rankBy() === "alltime") return " Ranked by events played, then opponents' match win % (OMW), then opponents' game win % (OGW), then MMR.";
+  if(rankBy() === "alltime") return " Ranked by events played, then wins, then draws, then opponents' game win % (OGW), opponents' match win % (OMW), game win % (GW), and MMR last.";
   return rankBy() === "score"
     ? " Ranked by event points: 3 a win, 1 a draw, 0 a loss, a bye counts as a win. Ties go to opponents' match win % (OMW), then game win % (GW), then opponents' game win % (OGW), then MMR."
     : " Ranked by MMR.";
