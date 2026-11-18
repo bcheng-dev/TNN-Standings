@@ -90,10 +90,18 @@ h2.sec{font-size:18px;letter-spacing:.1em;text-transform:uppercase;color:var(--m
 .p1 .nm,.p2 .nm,.p3 .nm{font-weight:600}
 .evs,.wl{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
 .pts{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.tb{font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto;white-space:nowrap}
+.tb{display:flex;gap:5px;flex:0 0 auto;white-space:nowrap}
+.stat{font-family:var(--mono);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);
+  background:var(--card-2);border:1px solid var(--line);border-radius:999px;padding:1px 8px;line-height:1.5}
+.stat i{font-style:normal;font-weight:500;color:var(--muted);margin-right:4px;font-size:10.5px;letter-spacing:.04em}
+.stat.key{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:var(--accent-soft)}
+.stat.minor{font-weight:500;color:var(--muted);background:none}
 .tbline{font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-top:9px}
 .tbline b{color:var(--ink);font-weight:600}
-@media (max-width:640px){ .tb{display:none} }
+@media (max-width:640px){
+  .head{flex-wrap:wrap;row-gap:6px}
+  .tb{order:10;flex:1 1 100%;padding-left:36px;flex-wrap:wrap}
+}
 .gap{flex:1 1 auto;min-width:10px}
 .spark{flex:0 0 auto;width:62px;height:18px;display:block}
 .chev{flex:0 0 auto;width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
@@ -388,10 +396,8 @@ function rowHTML(p, rank, matches){
       evs +
       '<span class="wl" title="Wins–losses–draws">' + num(p.w) + "–" + num(p.l) + "–" + num(p.d) + '</span>' +
       (rankBy() === "score" ? '<span class="pts" title="Event points: 3 a win, 1 a draw">' + num(p.pts) + ' pts</span>' +
-        '<span class="tb" title="Tiebreakers, in order: opponents\u2019 match win %, game win %, opponents\u2019 game win %">' +
-        tbText(p) + '</span>' : '') +
-      (rankBy() === "alltime" ? '<span class="tb" title="Tiebreakers after events, wins and draws, across every night">' +
-        "OGW " + pctOf(p.ogw) + " \u00b7 OMW " + pctOf(p.omw) + " \u00b7 GW " + pctOf(p.gwp) + '</span>' : '') +
+        statChips(p, ["omw", "gwp", "ogw"]) : '') +
+      (rankBy() === "alltime" ? statChips(p, ["ogw", "omw", "gwp"]) : '') +
       '<span class="gap"></span>' +
       sparkline(trackOf(p, matches)) +
       '<span class="chev"></span>' +
@@ -637,6 +643,19 @@ function withScores(players, date){
 }
 var pctOf = function(x){ return Math.round(num(x) * 100) + "%"; };
 function tbText(p){ return "OMW " + pctOf(p.omw) + " \u00b7 GW " + pctOf(p.gwp) + " \u00b7 OGW " + pctOf(p.ogw); }
+/* The tiebreakers as chips, in the order this view uses them. Game win % and
+   opponents' match win % are the two players ask about, so they are highlighted. */
+var STAT = {
+  omw: {label:"OMW", tip:"Opponents\u2019 match win %: how strong the players you faced were", cls:"key"},
+  gwp: {label:"GW",  tip:"Game win %: games you won out of games played", cls:"key"},
+  ogw: {label:"OGW", tip:"Opponents\u2019 game win %", cls:"minor"}
+};
+function statChips(p, order){
+  return '<span class="tb">' + order.map(function(k){
+    var d = STAT[k];
+    return '<span class="stat ' + d.cls + '" title="' + d.tip + '"><i>' + d.label + '</i>' + pctOf(p[k]) + '</span>';
+  }).join("") + '</span>';
+}
 
 /* Nexus Point balances are private, so this page does not read the Nexus Ledger. */
 
@@ -664,16 +683,19 @@ function eventsFor(date){
             w:num(r["Matches W"]), l:num(r["Matches L"]), d:drawsOf(r["Player"], date),
             gw:num(r["Games W"]), gl:num(r["Games L"]),
             perf:num(r["Perf"]) || null, events:null};
-  }).filter(function(p){ return p.name && !isJudge(p.name, p.category) && !isExcluded(p.name); });
+  /* A single night shows everyone who played that night, walk-ins and non-UCSD
+     players included, under their own names; only the UCSD all-time ladder leaves
+     them out. */
+  }).filter(function(p){ return p.name && !isJudge(p.name, p.category); });
 }
 function matchesFor(date){
   return MATCHES.filter(function(r){ return asDate(r["Date"]) === date; }).map(function(r){
     return {round:num(r["Round"]), table:r["Table"] === "" ? null : num(r["Table"]),
-            player:String(r["Player"] || ""), opponent:oppLabel(r["Opponent"], false),
+            player:String(r["Player"] || ""), opponent:oppLabel(r["Opponent"], true),
             result:String(r["Result"] || ""), score:String(r["Score"] || ""),
             games:String(r["Games"] || ""), change:num(r["Change"]),
             after:num(r["MMR after"])};
-  }).filter(function(m){ return !isJudge(m.player) && !isExcluded(m.player); });
+  }).filter(function(m){ return !isJudge(m.player); });
 }
 
 function showEvent(date){
